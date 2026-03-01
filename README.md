@@ -4,7 +4,7 @@ A Telegram bot that helps Maybank Manchester United credit card holders maximise
 
 ## Why This Exists
 
-The [Maybank Manchester United Card](https://www.maybank.com.sg/) has a unique rewards mechanic tied to Manchester United's EPL results:
+The [Maybank Manchester United Card](https://www.maybank2u.com.sg/en/personal/cards/credit/maybank-manchester-united-credit-debit.page?) has a unique rewards mechanic tied to Manchester United's EPL results:
 
 | Match Result | Earn Rate | Cap |
 |-------------|-----------|-----|
