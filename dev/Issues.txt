@@ -1,2 +1,0 @@
-Fix time to be 9am instead of 7am
-Stil work if odds api is unavailable
