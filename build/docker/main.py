@@ -8,6 +8,12 @@ import asyncio
 import logging
 import sys
 
+# Manchester United name variations
+MAN_UNITED_VARIATIONS = ["Manchester United", "Manchester United FC", "Man United", "Man Utd"]
+
+# Lock file path
+LOCK_FILE = '/app/logs/bot_lock.pid'
+
 # API keys and URLs
 ODDS_API_KEY = os.environ.get('ODDS_API_KEY')
 ODDS_API_BASE_URL = os.environ.get('ODDS_API_BASE_URL')
@@ -18,6 +24,10 @@ FOOTBALL_DATA_BASE_URL = os.environ.get('FOOTBALL_DATA_BASE_URL')
 MAN_UNITED_NAME = "Manchester United"
 MAN_UNITED_ID = 66
 
+# Helper function to check if a team is Manchester United
+def is_man_united(team_name):
+    return any(variation.lower() in team_name.lower() for variation in MAN_UNITED_VARIATIONS)
+
 # Telegram Bot Token and Chat ID
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
@@ -25,11 +35,44 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 # Initialize the Telegram bot
 bot = Bot(TELEGRAM_BOT_TOKEN)
 
-# Add these global variables at the top of your script
 CACHE_FILE = '/app/logs/notification_cache.json'
 cache = {}
 
+# Function to acquire execution lock
+def acquire_lock():
+    try:
+        # Check if lock file exists and process is still running
+        if os.path.exists(LOCK_FILE):
+            with open(LOCK_FILE, 'r') as f:
+                pid = int(f.read().strip())
+            try:
+                # Check if process with this PID exists
+                os.kill(pid, 0)
+                # Process exists, another instance is running
+                logger.info(f"Another instance is running with PID {pid}. Exiting.")
+                return False
+            except OSError:
+                # Process doesn't exist, stale lock file
+                logger.info("Stale lock file found. Acquiring lock.")
+        
+        # Create lock file with current PID
+        with open(LOCK_FILE, 'w') as f:
+            f.write(str(os.getpid()))
+        return True
+    except Exception as e:
+        logger.error(f"Error acquiring lock: {str(e)}")
+        return False
+
+# Function to release execution lock
+def release_lock():
+    try:
+        if os.path.exists(LOCK_FILE):
+            os.remove(LOCK_FILE)
+    except Exception as e:
+        logger.error(f"Error releasing lock: {str(e)}")
+
 # Initialize ACTIVE_MATCH as a global variable
+global ACTIVE_MATCH
 ACTIVE_MATCH = None
 
 def setup_logging():
@@ -107,8 +150,13 @@ async def send_notification(message, notification_type):
         last_sent_time = datetime.fromisoformat(cache[notification_type]['time'])
         last_sent_message = cache[notification_type]['message']
 
-        # Check if the same message was sent in the last 24 hours
-        if (datetime.now() - last_sent_time) < timedelta(hours=24) and message == last_sent_message:
+        # Prevent sending same type of notification within 30 minutes
+        if (datetime.now() - last_sent_time) < timedelta(minutes=30):
+            logger.info(f"Skipping {notification_type} notification - sent too recently")
+            return
+            
+        # For identical messages, use a longer timeframe
+        if message == last_sent_message and (datetime.now() - last_sent_time) < timedelta(hours=24):
             logger.info(f"Skipping duplicate {notification_type} notification")
             return
 
@@ -244,9 +292,12 @@ async def check_live_score():
         home_team = match['homeTeam']['name']
         away_team = match['awayTeam']['name']
         score = match['score']['fullTime']
-        is_home = home_team == MAN_UNITED_NAME
+        
+        # Use the helper function instead of direct comparison
+        is_home = is_man_united(home_team)
         man_united_score = score['home'] if is_home else score['away']
         opponent_score = score['away'] if is_home else score['home']
+        opponent = away_team if is_home else home_team
 
         message = f"🚨 Manchester United Live Match Update! 🚨\n\n"
         message += f"⚽ Live Score: {home_team} {score['home']} - {score['away']} {away_team}\n\n"
@@ -275,6 +326,30 @@ async def check_live_score():
 
         await send_notification(message, 'live_score')
 
+# Helper function to calculate time remaining until midnight
+def calculate_time_remaining():
+    # Use current date for midnight calculation, not match date
+    singapore_now = datetime.now(ZoneInfo("Asia/Singapore"))
+    singapore_midnight = datetime(
+        singapore_now.year, 
+        singapore_now.month, 
+        singapore_now.day, 
+        23, 59, 59, 999999, 
+        tzinfo=ZoneInfo("Asia/Singapore")
+    )
+    
+    time_remaining = singapore_midnight - singapore_now
+    
+    hours, remainder = divmod(time_remaining.seconds, 3600)
+    minutes, _ = divmod(remainder, 60)
+    
+    if hours > 0:
+        time_remaining_str = f"{hours} hour{'s' if hours != 1 else ''} and {minutes} minute{'s' if minutes != 1 else ''}"
+    else:
+        time_remaining_str = f"{minutes} minute{'s' if minutes != 1 else ''}"
+    
+    return time_remaining_str
+
 async def check_match_result():
     url = f"{FOOTBALL_DATA_BASE_URL}/teams/{MAN_UNITED_ID}/matches"
     headers = {"X-Auth-Token": FOOTBALL_DATA_API_KEY}
@@ -299,7 +374,9 @@ async def check_match_result():
             home_team = match['homeTeam']['name']
             away_team = match['awayTeam']['name']
             score = match['score']['fullTime']
-            is_home = home_team == "Manchester United FC"
+            
+            # Use the helper function instead of direct comparison
+            is_home = is_man_united(home_team)
 
             man_united_score = score['home'] if is_home else score['away']
             opponent_score = score['away'] if is_home else score['home']
@@ -321,21 +398,20 @@ async def check_match_result():
             message += f"⌛ End time (Singapore): {match_end_time_sg.strftime('%I:%M %p')}\n\n"
 
             if result == "won":
-                # Get midnight of the match start date in Singapore time
-                match_date_sg_midnight = match_date_sg.replace(hour=23, minute=59, second=59, microsecond=999999)
                 singapore_now = datetime.now(ZoneInfo("Asia/Singapore"))
+                
+                # Check if we're still on the same day in Singapore time
+                singapore_midnight = datetime(
+                    singapore_now.year, 
+                    singapore_now.month, 
+                    singapore_now.day, 
+                    23, 59, 59, 999999, 
+                    tzinfo=ZoneInfo("Asia/Singapore")
+                )
 
-                # Check if we're still on the same day as the match in Singapore time
-                if singapore_now <= match_date_sg_midnight:
-                    time_remaining = match_date_sg_midnight - singapore_now
-
-                    hours, remainder = divmod(time_remaining.seconds, 3600)
-                    minutes, _ = divmod(remainder, 60)
-
-                    if hours > 0:
-                        time_remaining_str = f"{hours} hour{'s' if hours != 1 else ''} and {minutes} minute{'s' if minutes != 1 else ''}"
-                    else:
-                        time_remaining_str = f"{minutes} minute{'s' if minutes != 1 else ''}"
+                # Check if we're still before midnight
+                if singapore_now <= singapore_midnight:
+                    time_remaining_str = calculate_time_remaining()
 
                     message += "💳 Maybank Manchester United Card Tip:\n"
                     message += "You can spend on the card now to earn bonus points and cashback!\n"
@@ -366,49 +442,54 @@ async def run_evening_check():
 async def main():
     global ACTIVE_MATCH
     logger.info("Script started")
+    
+    # Try to acquire lock
+    if not acquire_lock():
+        logger.info("Could not acquire lock. Exiting.")
+        return
+    
+    try:
+        # Initialize and load cache at startup
+        initialize_cache_file()
+        load_cache()
 
-    # Initialize and load cache at startup
-    initialize_cache_file()
-    load_cache()
+        # Get the current time in Singapore
+        singapore_time = datetime.now(ZoneInfo("Asia/Singapore"))
 
-    # Get the current time in Singapore
-    singapore_time = datetime.now(ZoneInfo("Asia/Singapore"))
+        # Morning checks (9:00 AM SGT)
+        if singapore_time.hour == 9 and singapore_time.minute < 15:
+            logger.info("Starting morning check at 9:00 AM SGT")
+            await run_morning_check()
+            await check_match_result()
 
-    # Morning checks - only run if it's exactly 9:00 AM
-    if singapore_time.hour == 9 and singapore_time.minute == 0:
-        logger.info("Starting morning check at 9:00 AM SGT")
-        await run_morning_check()
-        await check_match_result()
+        # Regular evening check (10:45 PM SGT)
+        elif singapore_time.hour == 22 and 45 <= singapore_time.minute < 60:
+            logger.info("Starting evening check at 10:45 PM SGT")
+            await run_evening_check()
 
-    # Check for match end at specific intervals if there's an active match
-    elif ACTIVE_MATCH is not None and not ACTIVE_MATCH.get('notified', False):
-        current_time = datetime.now(ZoneInfo("UTC"))
-        match_start = ACTIVE_MATCH['start_time']
-        minutes_since_start = (current_time - match_start).total_seconds() / 60
+        # Check for match end at specific intervals if there's an active match
+        elif ACTIVE_MATCH and not ACTIVE_MATCH['notified']:
+            current_time = datetime.now(ZoneInfo("UTC"))
+            match_start = ACTIVE_MATCH['start_time']
+            minutes_since_start = (current_time - match_start).total_seconds() / 60
 
-        # Check at specific times:
-        # 1. 90 minutes (normal time)
-        # 2. 105 minutes (potential extra time)
-        # 3. 120 minutes (maximum time)
-        if minutes_since_start in range(90, 92) or \
-           minutes_since_start in range(105, 107) or \
-           minutes_since_start in range(120, 122):
-            result = await check_match_result()
-            if result:
-                ACTIVE_MATCH['notified'] = True
+            # Check at specific times:
+            # 1. 90 minutes (normal time)
+            # 2. 105 minutes (potential extra time)
+            # 3. 120 minutes (maximum time)
+            if minutes_since_start in range(90, 92) or \
+               minutes_since_start in range(105, 107) or \
+               minutes_since_start in range(120, 122):
+                result = await check_match_result()
+                if result:
+                    ACTIVE_MATCH['notified'] = True
 
-        # Reset ACTIVE_MATCH after 2 hours
-        elif minutes_since_start > 120:
-            ACTIVE_MATCH = None
-
-    # Regular evening check (10:45 PM SGT)
-    elif singapore_time.hour == 22 and singapore_time.minute == 45:
-        logger.info("Starting evening check at 10:45 PM SGT")
-        await run_evening_check()
-
-    else:
-        logger.info("Not the scheduled time for checks. Exiting.")
-
+        else:
+            logger.info("Not the scheduled time for checks. Exiting.")
+    finally:
+        # Always release lock when done
+        release_lock()
+        
     logger.info("Script finished")
 
 if __name__ == "__main__":
