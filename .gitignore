@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.log
+notification_cache.json
+build/logs/
+build/docker/messages.html
+build/docker/telegram_notifications

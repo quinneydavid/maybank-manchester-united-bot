@@ -1,0 +1,26 @@
+version: '3.8'
+services:
+  mufc-match-notifier:
+    image: quinneyd/mufc-match-notifier:latest
+    container_name: mufc-match-notifier
+    environment:
+      - ODDS_API_KEY=${ODDS_API_KEY}
+      - ODDS_API_BASE_URL=${ODDS_API_BASE_URL}
+      - FOOTBALL_DATA_API_KEY=${FOOTBALL_DATA_API_KEY}
+      - FOOTBALL_DATA_BASE_URL=${FOOTBALL_DATA_BASE_URL}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Singapore
+    volumes:
+      - mufc-match-notifier-logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - public
+
+networks:
+  public:
+
+volumes:
+  mufc-match-notifier-logs:
