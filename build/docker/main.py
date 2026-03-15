@@ -369,8 +369,9 @@ async def check_match_result():
         match_end_time_utc = match_date_utc + timedelta(minutes=105)
         current_time_utc = datetime.now(ZoneInfo("UTC"))
 
-        # Check if match ended in last 2 hours
-        if (current_time_utc - match_end_time_utc) <= timedelta(hours=2):
+        # Check if match ended in last 14 hours (covers overnight gap between
+        # 10:45 PM evening check and 9 AM morning check in Singapore time)
+        if (current_time_utc - match_end_time_utc) <= timedelta(hours=14):
             home_team = match['homeTeam']['name']
             away_team = match['awayTeam']['name']
             score = match['score']['fullTime']
