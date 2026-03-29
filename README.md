@@ -162,10 +162,9 @@ A notification cache tracks what was sent and when:
 
 ## Deployment
 
-The container runs on `docker@core.lan` and is deployed via Docker Compose. The image is published to Docker Hub as `quinneyd/mufc-match-notifier`.
+The image is published to Docker Hub as `quinneyd/mufc-match-notifier` and deployed via Docker Compose.
 
 ```bash
 # Pull latest and redeploy
-cd /home/docker/stacks/core/manchesterunited
 docker compose pull && docker compose up -d
 ```
