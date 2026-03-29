@@ -260,13 +260,19 @@ Manchester United: {man_united_odds}
 
 🔮 Estimated win probability: {win_probability:.2f}%
 
-💳 Maybank Manchester United Card Tip:
-{"Consider using your card for purchases today for potential bonus points!" if win_probability > 50 else "The win probability is low. Use your card with caution today."}
+💳 Maybank Manchester United Card Rates:
+• Win → 2.8 mpd (SGD & FCY, capped S$2,000)
+• Draw → 1.6 mpd (SGD & FCY, capped S$2,000, 1/month)
+• Loss → 1.12 mpd (SGD & FCY, no cap)
+{"📌 Good odds — consider holding off big purchases until after the match for 2.8 mpd!" if win_probability > 50 else "📌 Tough odds — 1.12 mpd (no cap) is still decent for uncapped spend."}
 """
     else:
         message += """
-💳 Maybank Manchester United Card Tip:
-Use your card according to the match result for potential bonus points!
+💳 Maybank Manchester United Card Rates:
+• Win → 2.8 mpd (SGD & FCY, capped S$2,000)
+• Draw → 1.6 mpd (SGD & FCY, capped S$2,000, 1/month)
+• Loss → 1.12 mpd (SGD & FCY, no cap)
+📌 Wait for the result before making big purchases!
 """
 
     await send_notification(message, 'upcoming_match')
@@ -315,14 +321,20 @@ async def check_live_score():
 
         message += "📊 Current Status:\n"
         if man_united_score > opponent_score:
-            message += "Manchester United is winning! High chance you can spend on the card.\n\n"
+            message += "Manchester United is winning! 🔥\n\n"
+            message += "💳 Maybank Manchester United Card:\n"
+            message += "If they hold on → 2.8 mpd on all SGD & FCY spend today (capped at S$2,000).\n"
+            message += "Bonus valid until midnight Singapore time!"
         elif man_united_score == opponent_score:
-            message += "The match is currently tied. Spend with caution.\n\n"
+            message += "The match is currently tied.\n\n"
+            message += "💳 Maybank Manchester United Card:\n"
+            message += "If it ends in a draw → 1.6 mpd on all SGD & FCY spend today (capped at S$2,000, 1 draw/month).\n"
+            message += "If they win → 2.8 mpd (capped at S$2,000). Wait for the result!"
         else:
-            message += "Manchester United is currently behind. It's risky to spend on the card now.\n\n"
-
-        message += "💳 Maybank Manchester United Card Tip:\n"
-        message += "Remember, bonus spending is only valid until midnight Singapore time!"
+            message += "Manchester United is currently behind.\n\n"
+            message += "💳 Maybank Manchester United Card:\n"
+            message += "If they lose → 1.12 mpd on all SGD & FCY spend (no cap).\n"
+            message += "A comeback win would unlock 2.8 mpd — hold off on big purchases until the final whistle."
 
         await send_notification(message, 'live_score')
 
@@ -400,13 +412,13 @@ async def check_match_result():
 
             if result == "won":
                 singapore_now = datetime.now(ZoneInfo("Asia/Singapore"))
-                
+
                 # Check if we're still on the same day in Singapore time
                 singapore_midnight = datetime(
-                    singapore_now.year, 
-                    singapore_now.month, 
-                    singapore_now.day, 
-                    23, 59, 59, 999999, 
+                    singapore_now.year,
+                    singapore_now.month,
+                    singapore_now.day,
+                    23, 59, 59, 999999,
                     tzinfo=ZoneInfo("Asia/Singapore")
                 )
 
@@ -414,17 +426,23 @@ async def check_match_result():
                 if singapore_now <= singapore_midnight:
                     time_remaining_str = calculate_time_remaining()
 
-                    message += "💳 Maybank Manchester United Card Tip:\n"
-                    message += "You can spend on the card now to earn bonus points and cashback!\n"
-                    message += "Important: Bonus spending is only valid until midnight Singapore time tonight!\n\n"
-                    message += f"⏳ Time remaining for bonus spending: {time_remaining_str}"
+                    message += "💳 Maybank Manchester United Card — WIN! 🎉\n"
+                    message += "Earn 2.8 mpd on ALL SGD & FCY spend today!\n"
+                    message += "Cap: S$2,000 per win. Valid until midnight SGT.\n\n"
+                    message += f"⏳ Time remaining: {time_remaining_str}"
                 else:
-                    message += "💳 Maybank Manchester United Card Tip:\n"
-                    message += "The bonus spending period for this match has ended (midnight Singapore time).\n"
-                    message += "Standard points and cashback rates now apply."
+                    message += "💳 Maybank Manchester United Card — WIN! 🎉\n"
+                    message += "2.8 mpd earn rate has ended (midnight SGT).\n"
+                    message += "Back to 1.12 mpd (no cap) until next match."
+            elif result == "drew":
+                message += "💳 Maybank Manchester United Card — DRAW\n"
+                message += "Earn 1.6 mpd on all SGD & FCY spend today.\n"
+                message += "Cap: S$2,000 per draw, max 1 draw per calendar month.\n"
+                message += "Valid until midnight SGT."
             else:
-                message += "💳 Maybank Manchester United Card Tip:\n"
-                message += "Standard points and cashback rates apply for card spending. Check your card terms for details."
+                message += "💳 Maybank Manchester United Card — LOSS\n"
+                message += "Standard 1.12 mpd on all SGD & FCY spend (no cap).\n"
+                message += "No bonus rate today. Save the big purchases for a win day."
 
             await send_notification(message, 'match_result')
             return True
